@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Battling Chess</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:#14121f;color:#f3ead2;font-family:"Courier New",ui-monospace,monospace;font-weight:bold}
+body{background:repeating-conic-gradient(#1a1729 0 25%,#14121f 0 50%) 0 0/48px 48px}
+#app{max-width:480px;margin:0 auto;padding:8px;position:relative;min-height:100%}
+#top{display:flex;justify-content:space-between;align-items:center;background:#2a2340;border:3px solid #f3ead2;padding:6px 8px;font-size:15px}
+#top button{font:inherit;background:#f3ead2;color:#14121f;border:0;padding:2px 8px;cursor:pointer}
+#hp{color:#ff6b6b}
+.label{text-align:center;font-size:12px;letter-spacing:2px;margin:8px 0 4px;color:#bfb49a}
+.row{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.sq{aspect-ratio:3/4;position:relative;border:2px solid #000;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sq.l{background:#d9c9a3}.sq.d{background:#8a6a45}
+.sq.tgt{outline:3px solid #7CFC8A;outline-offset:-3px}
+.sq.pend{outline:3px dashed #ffd84d;outline-offset:-3px}
+.card{position:absolute;inset:3px;border:2px solid #000;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .12s}
+.card.w{background:#fffaf0;color:#14121f}
+.card.b{background:#2b2b2b;color:#fffaf0}
+.card.e{background:#5b1f3a;color:#ffd1dc}
+.card.ghost{opacity:.55}
+.card .g{font-size:min(9vw,40px);line-height:1}
+.card.w .g{color:#fff;text-shadow:0 0 1px #000,1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000}
+.card .st{font-size:11px;display:flex;justify-content:space-between;width:100%;padding:0 3px;position:absolute;bottom:1px}
+.card .nm{font-size:8px;position:absolute;top:2px;letter-spacing:.5px}
+.card .rd{position:absolute;top:12px;right:2px;font-size:12px}
+.card.atk{transform:translateY(-14px) scale(1.1)}
+.card.eatk{transform:translateY(14px) scale(1.1)}
+.card.hit{animation:hit .25s}
+@keyframes hit{0%,100%{transform:none}30%{transform:translateX(-5px)}60%{transform:translateX(5px)}}
+.bdg{position:absolute;z-index:2;font-size:11px;padding:1px 3px;border:2px solid #000}
+.bdg.g{top:-10px;left:50%;transform:translateX(-50%);background:#7CFC8A;color:#000}
+.bdg.r{bottom:-10px;left:50%;transform:translateX(-50%);background:#ff6b6b;color:#000}
+#mid{min-height:38px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;color:#ffd84d;padding:8px 4px 4px}
+#hand{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:6px;min-height:90px}
+#hand .hc{aspect-ratio:3/4;position:relative;cursor:pointer;transition:transform .12s}
+#hand .hc.sel{transform:translateY(-10px)}
+#hand .hc.sel .card{box-shadow:0 0 0 3px #ffd84d}
+#btns{display:flex;gap:8px;margin-top:12px}
+#btns button,.ov button{flex:1;font:inherit;font-size:16px;padding:12px;border:3px solid #000;cursor:pointer;background:#f3ead2;color:#14121f}
+#fight{background:#ff6b6b!important}
+#btns button:disabled{opacity:.4}
+.ov{position:fixed;inset:0;background:rgba(10,8,20,.92);display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
+.ov.on{display:flex}
+.box{max-width:420px;width:100%;background:#2a2340;border:3px solid #f3ead2;padding:16px;text-align:center}
+.box h1{font-size:26px;margin:4px 0 8px;letter-spacing:2px;color:#ffd84d}
+.box h2{font-size:18px;margin:4px 0 10px;color:#ffd84d}
+.box p{font-size:12px;line-height:1.5;margin:6px 0;text-align:left}
+.picks{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.picks .hc{aspect-ratio:3/4;position:relative;cursor:pointer}
+.picks .ds{font-size:9px;margin-top:4px}
+.fx{position:fixed;z-index:5;font-size:18px;pointer-events:none;animation:up .8s forwards;text-shadow:2px 2px 0 #000}
+@keyframes up{to{transform:translateY(-34px);opacity:0}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"><span id="rnd">Round 1</span><span id="hp">♥ 20</span><span id="best">Best 0</span><button id="mute">♪ ON</button></div>
+  <div class="label">ENEMY</div>
+  <div id="enemy" class="row"></div>
+  <div id="mid"></div>
+  <div id="player" class="row"></div>
+  <div class="label">YOUR BOARD · <span id="moves"></span></div>
+  <div id="hand"></div>
+  <div id="btns"><button id="redraw">Redraw</button><button id="fight">FIGHT ⚔</button></div>
+</div>
+<div id="ov" class="ov"><div class="box" id="box"></div></div>
+
+<script>
+const VS='︎';
+const T={
+ P:{n:'PAWN',g:'♟',hp:2,atk:1,pat:'pawn'},
+ N:{n:'KNIGHT',g:'♞',hp:3,atk:2,pat:'knight'},
+ B:{n:'BISHOP',g:'♝',hp:3,atk:1,pat:'bishop'},
+ R:{n:'ROOK',g:'♜',hp:5,atk:3,pat:'rook'},
+ Q:{n:'QUEEN',g:'♛',hp:4,atk:2,pat:'queen'},
+ K:{n:'KING',g:'♚',hp:6,atk:2,pat:'king'},
+ W:{n:'WILD PAWN',g:'♟',hp:2,atk:1,pat:'pawn',sp:'wild'},
+ H:{n:'HORSE',g:'♘',sp:'horse'}
+};
+const DESC={P:'Hits both diagonals',N:'Jumps 2 left and 2 right',B:'Hits every diagonal',R:'Smashes straight ahead',Q:'Straight ahead + every diagonal',K:'Hits the 3 squares in front',W:'Becomes a Rook, Knight or Bishop',H:'Put on your piece: it rides the horse (adds knight jumps; a Knight gets +1 attack)'};
+function pattern(pat,p){let a=[];
+ if(pat==='pawn')a=[p-1,p+1];else if(pat==='knight')a=[p-2,p+2];else if(pat==='bishop')a=[p-1,p+1,p-3,p+3,p-5,p+5];
+ else if(pat==='rook')a=[p];else if(pat==='queen')a=[p,p-1,p+1,p-3,p+3,p-5,p+5];else if(pat==='king')a=[p-1,p,p+1];
+ return a.filter(i=>i>=0&&i<6);}
+
+const $=id=>document.getElementById(id);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a}
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
+let S,uid=1;
+
+function mk(t,c){const d=T[t];return{id:uid++,t,c,hp:d.hp||0,max:d.hp||0,atk:d.atk||0,pat:d.pat||null,ride:false}}
+function newGame(){
+ S={round:1,hp:20,maxhp:20,kills:0,busy:false,sel:null,pend:null,
+  owned:[['P','w'],['P','b'],['P','w'],['P','b'],['N','w'],['N','b'],['B','w'],['B','b'],['R','w'],['W','b'],['H','w']]};
+ startRound();
+}
+function startRound(){
+ S.deck=shuffle(S.owned.map(([t,c])=>mk(t,c)));S.disc=[];S.hand=[];
+ S.board=Array(6).fill(null);S.enemy=Array(6).fill(null);S.turn=0;S.redraws=2;
+ spawnEnemies();newTurn();
+ msg(S.round%4===0?'The kings multiplied! Take down BOTH kings.':(S.round>=5&&S.round%4===1?'The king now moves like a QUEEN!':'Take down the enemy KING.'));
+}
+function draw(n){while(S.hand.length<n){if(!S.deck.length){if(!S.disc.length)break;S.deck=shuffle(S.disc);S.disc=[]}S.hand.push(S.deck.pop())}}
+function newTurn(){S.moves=3;S.sel=null;S.pend=null;draw(5);msg('Pick a card, then tap a square on your board.');render()}
+
+function enemyPiece(t,r){const b={P:[2,1,'pawn'],N:[3,2,'knight'],B:[3,1,'bishop'],R:[5,2,'rook'],Q:[5,2,'queen']}[t];const x=Math.floor((r-1)/2);
+ return{t,hp:b[0]+x,max:b[0]+x,atk:b[1]+Math.floor((r-1)/4),pat:b[2],king:false}}
+function enemyKing(r){const hp=5+r;return{t:'K',hp,max:hp,atk:1+Math.floor((r-1)/4),pat:r>=5?'queen':'king',king:true,crown:r>=5}}
+function spawnEnemies(){const r=S.round,kings=r%4===0?2:1,others=Math.min(6-kings,1+Math.ceil(r/2));
+ const pool=['P','P','N','B','R','Q'].slice(0,Math.min(6,2+r));const sl=shuffle([0,1,2,3,4,5]);let k=0;
+ for(let i=0;i<kings;i++)S.enemy[sl[k++]]=enemyKing(r);
+ for(let i=0;i<others;i++)S.enemy[sl[k++]]=enemyPiece(pool[Math.random()*pool.length|0],r);}
+
+function checker(b){return b.every(x=>x)&&b.every((x,i)=>i===0||x.c!==b[i-1].c)}
+function atkOf(c,p,b){let a=c.atk;if(c.ride&&c.t==='N')a+=1;const L=b[p-1],R=b[p+1];if((L&&L.c!==c.c)||(R&&R.c!==c.c))a+=1;if(checker(b))a*=2;return a}
+function targetsOf(c,p){let t=pattern(c.pat,p);if(c.ride&&c.t!=='N')t=[...new Set([...t,...pattern('knight',p)])];return t}
+function boardDmg(b){const d=[0,0,0,0,0,0];b.forEach((c,p)=>{if(!c)return;const a=atkOf(c,p,b);targetsOf(c,p).forEach(i=>d[i]+=a)});return d}
+function enemyDmg(){const d=[0,0,0,0,0,0];S.enemy.forEach((e,i)=>{if(!e)return;pattern(e.pat,i).forEach(j=>d[j]+=e.atk)});return d}
+function selCard(){return S.hand.find(c=>c.id===S.sel)}
+function hyp(){const b=S.board.slice();let tg=[];const c=selCard();
+ if(c&&S.pend!=null){const p=S.pend;if(c.t==='H'){b[p]=Object.assign({},b[p],{ride:true})}else b[p]=c;tg=targetsOf(b[p],p)}
+ return{b,tg}}
+
+function glyph(c,enemy){let g=T[c.t].g;if(enemy&&c.crown)g='♛';return g+VS}
+function cardHTML(c,cls){const enemy=cls==='e';const name=enemy&&c.king?(c.crown?'QUEEN KING':'KING'):T[c.t].n;
+ const st=c.t==='H'?'<div class="st"><span>RIDE</span></div>':`<div class="st"><span>⚔${c.atk}</span><span>♥${c.hp}</span></div>`;
+ return `<div class="card ${cls}"><div class="nm">${name}</div><div class="g">${glyph(c,enemy)}</div>${c.ride?'<div class="rd">♘'+VS+'</div>':''}${st}</div>`}
+
+function render(){
+ $('rnd').textContent='Round '+S.round;$('hp').textContent='♥ '+S.hp;$('best').textContent='Best '+(store('bc_best')||0);
+ $('moves').textContent='MOVES '+S.moves;$('redraw').textContent='Redraw ('+S.redraws+')';
+ $('redraw').disabled=S.busy||S.redraws<=0;$('fight').disabled=S.busy;
+ const h=hyp(),dmg=boardDmg(h.b),inc=enemyDmg();
+ let eh='';for(let i=0;i<6;i++){const e=S.enemy[i];
+  eh+=`<div class="sq ${i%2?'d':'l'}${h.tg.includes(i)?' tgt':''}">${e?cardHTML(e,'e'):''}${dmg[i]>0&&e?`<div class="bdg g">-${dmg[i]}${dmg[i]>=e.hp?' KO':''}</div>`:''}</div>`}
+ $('enemy').innerHTML=eh;
+ let ph='';const sc=selCard();for(let i=0;i<6;i++){const c=S.board[i];let inner=c?cardHTML(c,c.c):'';
+  if(S.pend===i&&sc&&sc.t!=='H')inner=cardHTML(sc,sc.c+' ghost');
+  ph+=`<div class="sq ${i%2?'l':'d'}${S.pend===i?' pend':''}" data-i="${i}">${inner}${inc[i]>0?`<div class="bdg r">${c?'-'+inc[i]:'♥-'+inc[i]}</div>`:''}</div>`}
+ $('player').innerHTML=ph;
+ $('hand').innerHTML=S.hand.map(c=>`<div class="hc${c.id===S.sel?' sel':''}" data-id="${c.id}">${cardHTML(c,c.c)}</div>`).join('');
+}
+function msg(t){$('mid').textContent=t}
+
+$('hand').onclick=e=>{const el=e.target.closest('.hc');if(!el||S.busy)return;tap();
+ if(S.moves<=0){msg('No moves left. Press FIGHT!');return}
+ const id=+el.dataset.id;S.sel=S.sel===id?null:id;S.pend=null;const c=selCard();
+ msg(c?`${T[c.t].n}: ${DESC[c.t]}`:'Pick a card, then tap a square on your board.');render()};
+$('player').onclick=e=>{const el=e.target.closest('.sq');if(!el||S.busy)return;const i=+el.dataset.i;const c=selCard();
+ if(!c){const b=S.board[i];if(b)msg(`${T[b.t].n}${b.ride?' (riding)':''}: ${DESC[b.t]}`);return}
+ if(c.t==='H'){if(!S.board[i]||S.board[i].ride){msg('The Horse goes on one of your pieces that is not already riding.');return}}
+ else if(S.board[i]){msg('That square is taken. Pick an empty one.');return}
+ if(S.pend!==i){S.pend=i;tap();msg('Green squares get hit. Tap again to place.');render();return}
+ place(i)};
+function place(i){const c=selCard();S.hand=S.hand.filter(x=>x.id!==c.id);S.moves--;S.sel=null;S.pend=null;sfx('place');
+ if(c.t==='H'){S.board[i].ride=true;S.disc.push(c);msg('Your '+T[S.board[i].t].n+' rides the horse!')}
+ else{S.board[i]=c;if(c.t==='W'){render();return wildPick(c)}msg(S.moves?'Place more, or press FIGHT.':'No moves left. Press FIGHT!')}
+ render()}
+function wildPick(c){S.busy=true;
+ $('box').innerHTML='<h2>WILD PAWN</h2><p style="text-align:center">Pick what it becomes:</p><div class="picks">'+['R','N','B'].map(t=>`<div><div class="hc" data-t="${t}">${cardHTML(Object.assign(mk(t,c.c)),c.c)}</div><div class="ds">${DESC[t]}</div></div>`).join('')+'</div>';
+ ov(true);$('box').querySelectorAll('.hc').forEach(el=>el.onclick=()=>{const t=el.dataset.t,d=T[t];Object.assign(c,{t,hp:d.hp,max:d.hp,atk:d.atk,pat:d.pat});
+  ov(false);S.busy=false;sfx('kill');msg('Wild Pawn became a '+d.n+'!');render()})}
+
+$('redraw').onclick=()=>{if(S.busy||S.redraws<=0)return;S.disc.push(...S.hand);S.hand=[];draw(5);S.redraws--;S.sel=null;S.pend=null;sfx('place');msg('New hand!');render()};
+function slotEl(row,i){return $(row).children[i]}
+function fx(el,t,col){const r=el.getBoundingClientRect();const d=document.createElement('div');d.className='fx';d.textContent=t;d.style.color=col;
+ d.style.left=(r.left+r.width/2-10)+'px';d.style.top=(r.top+r.height/3)+'px';document.body.appendChild(d);setTimeout(()=>d.remove(),800)}
+
+$('fight').onclick=async()=>{if(S.busy)return;S.busy=true;S.sel=null;S.pend=null;render();
+ const chk=checker(S.board);if(chk){msg('CHECKERBOARD! Every attack x2!');sfx('kill');await sleep(600)}else msg('Attack!');
+ const snap=S.board.slice();
+ for(let p=0;p<6;p++){const c=S.board[p];if(!c)continue;const a=atkOf(c,p,snap),tg=targetsOf(c,p);
+  const ce=slotEl('player',p).querySelector('.card');if(ce)ce.classList.add('atk');sfx('swing');await sleep(160);
+  for(const i of tg){const e=S.enemy[i];if(!e)continue;e.hp-=a;fx(slotEl('enemy',i),'-'+a,'#7CFC8A');
+   const ee=slotEl('enemy',i).querySelector('.card');if(ee)ee.classList.add('hit');
+   if(e.hp<=0){S.enemy[i]=null;S.kills++;sfx('kill')}else sfx('hit')}
+  await sleep(220);render();await sleep(80)}
+ if(!S.enemy.some(e=>e&&e.king)){await sleep(300);return roundWon()}
+ msg('Enemy turn!');await sleep(350);
+ for(let i=0;i<6;i++){const e=S.enemy[i];if(!e)continue;const ee=slotEl('enemy',i).querySelector('.card');if(ee)ee.classList.add('eatk');sfx('eswing');await sleep(160);
+  for(const j of pattern(e.pat,i)){const c=S.board[j];
+   if(c){c.hp-=e.atk;fx(slotEl('player',j),'-'+e.atk,'#ff6b6b');if(c.hp<=0){S.board[j]=null;c.hp=c.max;c.ride=false;S.disc.push(c);sfx('kill')}else sfx('hit')}
+   else{S.hp-=e.atk;fx(slotEl('player',j),'♥-'+e.atk,'#ff6b6b');sfx('hurt')}}
+  await sleep(220);render();await sleep(80);if(S.hp<=0)break}
+ if(S.hp<=0){S.hp=0;render();await sleep(400);return gameOver()}
+ S.turn++;if(S.turn%2===0){const em=[0,1,2,3,4,5].filter(i=>!S.enemy[i]);if(em.length){const i=em[Math.random()*em.length|0];S.enemy[i]=enemyPiece('P',S.round);}}
+ S.busy=false;newTurn();if(S.turn%2===0)msg('A new enemy pawn joined!')};
+
+function bestSave(r){const b=+(store('bc_best')||0);if(r>b)store('bc_best',r)}
+function roundWon(){sfx('win');bestSave(S.round);
+ const opts=['Q','K','R','N','B','W','H','P','N','B','R','Q'];const picks=[];while(picks.length<3)picks.push(mk(opts[Math.random()*opts.length|0],Math.random()<.5?'w':'b'));
+ $('box').innerHTML=`<h2>CHECKMATE!</h2><p style="text-align:center">Round ${S.round} cleared · +5 ♥<br>Add one card to your deck:</p><div class="picks">`+
+  picks.map((c,k)=>`<div><div class="hc" data-k="${k}">${cardHTML(c,c.c)}</div><div class="ds">${DESC[c.t]}</div></div>`).join('')+'</div>';
+ ov(true);$('box').querySelectorAll('.hc').forEach(el=>el.onclick=()=>{const c=picks[+el.dataset.k];S.owned.push([c.t,c.c]);
+  S.hp=Math.min(S.maxhp,S.hp+5);S.round++;S.busy=false;ov(false);tap();startRound()})}
+function gameOver(){sfx('lose');bestSave(S.round);
+ $('box').innerHTML=`<h1>CHECKMATED</h1><p style="text-align:center">You reached Round ${S.round}<br>Pieces taken: ${S.kills}<br>Best: Round ${store('bc_best')||S.round}</p><div id="btns"><button id="again">PLAY AGAIN</button></div>`;
+ ov(true);$('again').onclick=()=>{ov(false);newGame()}}
+function ov(on){$('ov').classList.toggle('on',on)}
+
+function title(){
+ $('box').innerHTML=`<h1>BATTLING CHESS</h1>
+ <p>♟ Pick a card, tap a square on your board to see who it hits (green), tap again to place.</p>
+ <p>♟ 3 moves per turn. Press FIGHT: your pieces attack the way they move in chess.</p>
+ <p>♟ Black next to White = +1 attack. Fill all 6 squares in a checkerboard = x2!</p>
+ <p>♟ Horse card: any piece can ride it. Wild Pawn: turns into Rook, Knight or Bishop.</p>
+ <p>♟ Red numbers = enemy hits coming. Empty squares hit your ♥.</p>
+ <p>♟ Take the KING to win the round. The kings never stop coming.</p>
+ <div id="btns"><button id="start">START</button></div>`;
+ ov(true);$('start').onclick=()=>{audioInit();ov(false);newGame()}}
+
+/* ---------- AUDIO ---------- */
+let ac,master,musicGain,sfxGain,music=store('bc_music')!=='off',nextT=0,step=0,timer=null,noiseBuf;
+const mtof=m=>440*Math.pow(2,(m-69)/12);
+function audioInit(){if(ac){ac.resume();return}try{ac=new(window.AudioContext||window.webkitAudioContext)()}catch(e){return}
+ master=ac.createGain();master.gain.value=.5;master.connect(ac.destination);
+ musicGain=ac.createGain();musicGain.gain.value=music?1:0;musicGain.connect(master);
+ sfxGain=ac.createGain();sfxGain.gain.value=1;sfxGain.connect(master);
+ noiseBuf=ac.createBuffer(1,ac.sampleRate*.2,ac.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+ nextT=ac.currentTime+.1;timer=setInterval(sched,25);updMute()}
+function tone(type,f,t,dur,vol,dest,slide){const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+dur);
+ g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+.01);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g);g.connect(dest);o.start(t);o.stop(t+dur+.02)}
+function noise(t,dur,vol,dest){const s=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();f.type='highpass';f.frequency.value=6000;s.buffer=noiseBuf;
+ g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);s.connect(f);f.connect(g);g.connect(dest);s.start(t);s.stop(t+dur)}
+const BPM=76,S16=60/BPM/4;
+const CH=[[57,60,64,67],[50,53,57,60],[55,59,62,65],[48,52,55,59],[53,57,60,64],[52,56,59,62],[57,60,64,67],[52,56,59,64]];
+const MEL=[[76,null,null,74,72,null,74,null,76,null,79,null,76,null,null,null],[74,null,72,null,69,null,null,72,74,null,null,null,77,null,76,null],
+ [74,null,null,71,67,null,71,null,74,null,77,null,76,null,74,null],[72,null,null,null,71,null,72,null,76,null,null,null,null,null,null,null],
+ [72,null,74,null,76,null,null,77,76,null,74,null,72,null,null,null],[71,null,null,null,68,null,71,null,74,null,null,null,71,null,null,null],
+ [72,null,71,null,69,null,null,72,76,null,null,74,72,null,null,null],[71,null,null,null,68,null,null,null,64,null,null,null,null,null,null,null]];
+function sched(){while(nextT<ac.currentTime+.12){const bar=Math.floor(step/16)%8,s=step%16,ch=CH[bar],t=nextT;
+  if(s===0||s===10)tone('triangle',mtof(ch[0]-12),t,S16*5,.35,musicGain);
+  if(s===6||s===14)tone('triangle',mtof(ch[0]-5),t,S16*2,.25,musicGain);
+  if(s%2===0)tone('square',mtof(ch[[0,1,2,3,2,1,0,2][(s/2)%8]]),t,S16*1.6,.035,musicGain);
+  const m=MEL[bar][s];if(m&&step>=128)tone('square',mtof(m),t,S16*3.5,.05,musicGain);
+  if(s===4||s===12)noise(t,.05,.08,musicGain);if(s%2===1)noise(t,.02,.025,musicGain);
+  nextT+=S16;step++}}
+function sfx(k){if(!ac)return;const t=ac.currentTime;
+ if(k==='place')tone('square',660,t,.08,.12,sfxGain,990);
+ else if(k==='swing')tone('square',300,t,.1,.08,sfxGain,600);
+ else if(k==='eswing')tone('sawtooth',260,t,.12,.07,sfxGain,130);
+ else if(k==='hit'){noise(t,.08,.25,sfxGain);tone('square',180,t,.08,.1,sfxGain,90)}
+ else if(k==='kill'){tone('square',523,t,.08,.12,sfxGain);tone('square',784,t+.08,.12,.12,sfxGain)}
+ else if(k==='hurt')tone('sawtooth',200,t,.2,.14,sfxGain,60);
+ else if(k==='win')[523,659,784,1047].forEach((f,i)=>tone('square',f,t+i*.1,.18,.12,sfxGain));
+ else if(k==='lose')[392,330,262,196].forEach((f,i)=>tone('triangle',f,t+i*.16,.3,.25,sfxGain));}
+function tap(){sfx('place')}
+function updMute(){$('mute').textContent=music?'♪ ON':'♪ OFF';if(musicGain)musicGain.gain.value=music?1:0}
+$('mute').onclick=()=>{music=!music;store('bc_music',music?'on':'off');audioInit();updMute()};
+document.addEventListener('visibilitychange',()=>{if(!ac)return;document.hidden?ac.suspend():ac.resume()});
+
+S={round:1,hp:20,moves:3,redraws:2,board:Array(6).fill(null),enemy:Array(6).fill(null),hand:[],sel:null,pend:null,busy:true};
+render();updMute();title();
+</script>
+</body>
+</html>
